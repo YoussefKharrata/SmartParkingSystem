@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Réservations SmartParking</title>
+<style>
+  :root {
+    --bg:    #0d0f14;
+    --card:  #161920;
+    --brd:   #222733;
+    --txt:   #e4e8f0;
+    --dim:   #6b7280;
+    --blue:  #00b0ff;
+    --green: #00e676;
+    --red:   #ff1744;
+    --amber: #ffab00;
+    --mono:  'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--txt); font-family: system-ui, sans-serif; min-height: 100vh; }
+
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--brd);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 1.1rem; font-weight: 600; }
+  header a { color: var(--blue); font-size: .82rem; text-decoration: none; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
+
+  /* ── Stat cards ── */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: var(--card); border: 1px solid var(--brd); border-radius: 10px; padding: 14px 18px; }
+  .stat-val  { font-size: 1.8rem; font-weight: 700; }
+  .stat-lbl  { font-size: .75rem; color: var(--dim); margin-top: 2px; }
+
+  /* ── Tarifs ── */
+  .section-title { font-size: .95rem; font-weight: 600; margin-bottom: 12px; color: var(--blue); }
+  .tarif-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .tarif-row label { font-size: .85rem; color: var(--dim); width: 220px; }
+  .tarif-row input { background: var(--bg); border: 1px solid var(--brd); border-radius: 6px; color: var(--txt); padding: 6px 10px; width: 100px; font-size: .9rem; }
+  .tarif-row input:focus { outline: none; border-color: var(--blue); }
+  .btn { cursor: pointer; border: none; border-radius: 6px; padding: 7px 18px; font-size: .85rem; font-weight: 600; transition: opacity .15s; }
+  .btn:hover { opacity: .85; }
+  .btn-blue  { background: var(--blue);  color: #000; }
+  .btn-green { background: var(--green); color: #000; }
+  .btn-red   { background: var(--red);   color: #fff; }
+  .btn-sm    { padding: 4px 12px; font-size: .78rem; }
+
+  /* ── Formulaire réservation ── */
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .form-group label { display: block; font-size: .78rem; color: var(--dim); margin-bottom: 4px; }
+  .form-group input, .form-group select {
+    width: 100%; background: var(--bg); border: 1px solid var(--brd);
+    border-radius: 6px; color: var(--txt); padding: 8px 10px; font-size: .88rem;
+  }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--blue); }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--brd); }
+  table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+  thead th { background: var(--card); padding: 10px 12px; text-align: left; color: var(--dim); font-weight: 600; white-space: nowrap; border-bottom: 1px solid var(--brd); }
+  tbody tr { border-bottom: 1px solid var(--brd); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,.02); }
+  tbody td { padding: 9px 12px; white-space: nowrap; }
+
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: .72rem; font-weight: 600; }
+  .badge-active  { background: rgba(0,230,118,.15); color: var(--green); border: 1px solid rgba(0,230,118,.3); }
+  .badge-cancel  { background: rgba(255,23,68,.12);  color: var(--red);   border: 1px solid rgba(255,23,68,.25); }
+  .badge-past    { background: rgba(107,114,128,.12); color: var(--dim);   border: 1px solid rgba(107,114,128,.25); }
+  .badge-future  { background: rgba(0,176,255,.12);  color: var(--blue);  border: 1px solid rgba(0,176,255,.25); }
+
+  /* ── Filter tabs ── */
+  .filter-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-tab  { cursor: pointer; padding: 5px 14px; border-radius: 20px; font-size: .8rem;
+                 border: 1px solid var(--brd); background: transparent; color: var(--dim); transition: all .15s; }
+  .filter-tab.active { border-color: var(--blue); color: var(--blue); background: rgba(0,176,255,.08); }
+
+  .card-block { background: var(--card); border: 1px solid var(--brd); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+
+  .msg-ok  { color: var(--green); font-size: .82rem; margin-top: 8px; }
+  .msg-err { color: var(--red);   font-size: .82rem; margin-top: 8px; }
+
+  .montant { font-family: var(--mono); color: var(--amber); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🅿️ SmartParking — Admin Réservations</h1>
+  <a href="/">← Retour au Dashboard</a>
+</header>
+
+<div class="container">
+
+  <!-- ── Stats ── -->
+  <div class="stat-grid" id="stat-grid">
+    <div class="stat-card"><div class="stat-val" id="s-actives" style="color:var(--green)">—</div><div class="stat-lbl">Actives maintenant</div></div>
+    <div class="stat-card"><div class="stat-val" id="s-avenir"  style="color:var(--blue)">—</div><div class="stat-lbl">À venir</div></div>
+    <div class="stat-card"><div class="stat-val" id="s-total">—</div><div class="stat-lbl">Total réservations</div></div>
+    <div class="stat-card"><div class="stat-val" id="s-annulees" style="color:var(--red)">—</div><div class="stat-lbl">Annulées</div></div>
+    <div class="stat-card"><div class="stat-val montant" id="s-revenus">—</div><div class="stat-lbl">Revenus (MAD)</div></div>
+  </div>
+
+  <!-- ── Tarification ── -->
+  <div class="card-block">
+    <div class="section-title">⚙️ Tarification</div>
+    <div class="tarif-row">
+      <label>Tarif sans réservation (MAD/h)</label>
+      <input type="number" id="tarif-base" step="0.5" min="0">
+      <button class="btn btn-blue btn-sm" onclick="saveTarif('tarif_base','tarif-base')">Enregistrer</button>
+    </div>
+    <div class="tarif-row">
+      <label>Tarif avec réservation (MAD/h) <span style="color:var(--amber);font-size:.75rem">+% appliqué</span></label>
+      <input type="number" id="tarif-reserve" step="0.5" min="0">
+      <button class="btn btn-blue btn-sm" onclick="saveTarif('tarif_reserve','tarif-reserve')">Enregistrer</button>
+    </div>
+    <div id="tarif-msg"></div>
+  </div>
+
+  <!-- ── Nouvelle réservation ── -->
+  <div class="card-block">
+    <div class="section-title">➕ Nouvelle réservation</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Place N°</label>
+        <select id="f-place"></select>
+      </div>
+      <div class="form-group">
+        <label>Nom client *</label>
+        <input type="text" id="f-nom" placeholder="Ahmed Benali">
+      </div>
+      <div class="form-group">
+        <label>Téléphone</label>
+        <input type="tel" id="f-tel" placeholder="06XXXXXXXX">
+      </div>
+      <div class="form-group">
+        <label>UID Badge (optionnel)</label>
+        <input type="text" id="f-uid" placeholder="A1B2C3D4" style="font-family:var(--mono)">
+      </div>
+      <div class="form-group">
+        <label>Début *</label>
+        <input type="datetime-local" id="f-debut">
+      </div>
+      <div class="form-group">
+        <label>Fin *</label>
+        <input type="datetime-local" id="f-fin">
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <button class="btn btn-green" onclick="creerReservation()">Réserver</button>
+      <div id="form-preview" style="font-size:.82rem;color:var(--dim)"></div>
+    </div>
+    <div id="form-msg"></div>
+  </div>
+
+  <!-- ── Liste ── -->
+  <div class="card-block">
+    <div class="section-title">📋 Liste des réservations</div>
+    <div class="filter-tabs">
+      <button class="filter-tab active" onclick="filterReservations('all',this)">Toutes</button>
+      <button class="filter-tab" onclick="filterReservations('active',this)">Actives</button>
+      <button class="filter-tab" onclick="filterReservations('annulee',this)">Annulées</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Place</th>
+            <th>Client</th>
+            <th>Téléphone</th>
+            <th>UID Badge</th>
+            <th>Début</th>
+            <th>Fin</th>
+            <th>Durée</th>
+            <th>Tarif/h</th>
+            <th>Montant</th>
+            <th>Statut</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="res-tbody">
+          <tr><td colspan="12" style="text-align:center;padding:30px;color:var(--dim)">Chargement…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const NB_PLACES = 6; // sera mis à jour
+let currentFilter = 'all';
+
+// ── Initialisation ──────────────────────────────────────────────────────────
+async function init() {
+  // Config
+  try {
+    const c = await fetch('/api/config').then(r => r.json());
+    const sel = document.getElementById('f-place');
+    sel.innerHTML = '';
+    for (let i = 1; i <= c.nb_places; i++) {
+      sel.innerHTML += `<option value="${i}">Place ${i}</option>`;
+    }
+  } catch(e) {}
+
+  // Date par défaut : maintenant + 15 min, fin = début + 1h
+  const now  = new Date();
+  now.setMinutes(now.getMinutes() + 15, 0, 0);
+  const fin  = new Date(now.getTime() + 3600000);
+  document.getElementById('f-debut').value = toLocalInput(now);
+  document.getElementById('f-fin').value   = toLocalInput(fin);
+
+  await chargerTarifs();
+  await chargerStats();
+  await chargerReservations('all');
+
+  // preview live
+  ['f-debut','f-fin','f-place'].forEach(id =>
+    document.getElementById(id).addEventListener('change', updatePreview)
+  );
+  updatePreview();
+}
+
+function toLocalInput(d) {
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ── Tarifs ──────────────────────────────────────────────────────────────────
+async function chargerTarifs() {
+  try {
+    const tarifs = await fetch('/api/tarifs').then(r => r.json());
+    tarifs.forEach(t => {
+      if (t.nom === 'tarif_base')    document.getElementById('tarif-base').value    = t.valeur;
+      if (t.nom === 'tarif_reserve') document.getElementById('tarif-reserve').value = t.valeur;
+    });
+  } catch(e) {}
+}
+
+async function saveTarif(nom, inputId) {
+  const valeur = parseFloat(document.getElementById(inputId).value);
+  if (isNaN(valeur) || valeur < 0) return;
+  const msg = document.getElementById('tarif-msg');
+  try {
+    const r = await fetch('/api/tarifs', {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({nom, valeur})
+    }).then(r => r.json());
+    msg.className = 'msg-ok';
+    msg.textContent = `✓ Tarif "${nom}" mis à jour : ${valeur} MAD/h`;
+    updatePreview();
+  } catch(e) {
+    msg.className = 'msg-err';
+    msg.textContent = 'Erreur lors de la mise à jour';
+  }
+  setTimeout(() => msg.textContent = '', 3000);
+}
+
+// ── Stats ────────────────────────────────────────────────────────────────────
+async function chargerStats() {
+  try {
+    const s = await fetch('/api/reservations/stats').then(r => r.json());
+    document.getElementById('s-actives').textContent  = s.actives;
+    document.getElementById('s-avenir').textContent   = s.a_venir;
+    document.getElementById('s-total').textContent    = s.total;
+    document.getElementById('s-annulees').textContent = s.annulees;
+    document.getElementById('s-revenus').textContent  = s.revenus_total.toFixed(2);
+  } catch(e) {}
+}
+
+// ── Prévisualisation ─────────────────────────────────────────────────────────
+function updatePreview() {
+  const debut  = new Date(document.getElementById('f-debut').value);
+  const fin    = new Date(document.getElementById('f-fin').value);
+  const tarif  = parseFloat(document.getElementById('tarif-reserve').value) || 15;
+  if (isNaN(debut) || isNaN(fin) || fin <= debut) {
+    document.getElementById('form-preview').textContent = '';
+    return;
+  }
+  const duree  = (fin - debut) / 3600000;
+  const montant = (duree * tarif).toFixed(2);
+  document.getElementById('form-preview').innerHTML =
+    `Durée : <strong style="color:var(--txt)">${duree.toFixed(1)}h</strong> &nbsp;|&nbsp;
+     Tarif : <strong style="color:var(--amber)">${tarif} MAD/h</strong> &nbsp;|&nbsp;
+     Total : <strong style="color:var(--amber)">${montant} MAD</strong>`;
+}
+
+// ── Créer réservation ────────────────────────────────────────────────────────
+async function creerReservation() {
+  const msg = document.getElementById('form-msg');
+  const body = {
+    place_id:   parseInt(document.getElementById('f-place').value),
+    nom_client: document.getElementById('f-nom').value.trim(),
+    telephone:  document.getElementById('f-tel').value.trim(),
+    uid_badge:  document.getElementById('f-uid').value.trim(),
+    debut:      document.getElementById('f-debut').value,
+    fin:        document.getElementById('f-fin').value,
+  };
+  if (!body.nom_client) { showMsg(msg, 'err', 'Le nom client est requis'); return; }
+  if (!body.debut || !body.fin) { showMsg(msg, 'err', 'Début et fin requis'); return; }
+
+  try {
+    const r = await fetch('/api/reservations', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) { showMsg(msg, 'err', data.error || 'Erreur'); return; }
+    showMsg(msg, 'ok', `✓ Réservation #${data.id} créée — ${data.montant_total} MAD`);
+    document.getElementById('f-nom').value = '';
+    document.getElementById('f-tel').value = '';
+    document.getElementById('f-uid').value = '';
+    await chargerReservations(currentFilter);
+    await chargerStats();
+  } catch(e) {
+    showMsg(msg, 'err', 'Erreur réseau');
+  }
+}
+
+// ── Liste ────────────────────────────────────────────────────────────────────
+function filterReservations(statut, btn) {
+  currentFilter = statut;
+  document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  chargerReservations(statut);
+}
+
+async function chargerReservations(statut) {
+  const url  = statut === 'all' ? '/api/reservations' : `/api/reservations?statut=${statut}`;
+  const tbody = document.getElementById('res-tbody');
+  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--dim)">Chargement…</td></tr>';
+  try {
+    const now  = new Date();
+    const rows = await fetch(url).then(r => r.json());
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--dim)">Aucune réservation</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const debut  = new Date(r.debut);
+      const fin    = new Date(r.fin);
+      let statBadge, statLabel;
+      if (r.statut === 'annulee') {
+        statBadge = 'badge-cancel'; statLabel = 'Annulée';
+      } else if (debut > now) {
+        statBadge = 'badge-future'; statLabel = 'À venir';
+      } else if (fin < now) {
+        statBadge = 'badge-past';   statLabel = 'Terminée';
+      } else {
+        statBadge = 'badge-active'; statLabel = 'Active';
+      }
+      const canCancel = r.statut === 'active' && fin > now;
+      return `<tr>
+        <td style="color:var(--dim)">#${r.id}</td>
+        <td><strong>P${r.place_id}</strong></td>
+        <td>${esc(r.nom_client)}</td>
+        <td style="color:var(--dim)">${r.telephone || '—'}</td>
+        <td style="font-family:var(--mono);font-size:.78rem;color:var(--blue)">${r.uid_badge || '—'}</td>
+        <td>${fmtDate(debut)}</td>
+        <td>${fmtDate(fin)}</td>
+        <td>${r.duree_heures}h</td>
+        <td class="montant">${r.tarif_heure} MAD</td>
+        <td class="montant">${r.montant_total} MAD</td>
+        <td><span class="badge ${statBadge}">${statLabel}</span></td>
+        <td>${canCancel ? `<button class="btn btn-red btn-sm" onclick="annuler(${r.id})">Annuler</button>` : '—'}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--red)">Erreur de chargement</td></tr>';
+  }
+}
+
+async function annuler(id) {
+  if (!confirm(`Annuler la réservation #${id} ?`)) return;
+  try {
+    const r = await fetch(`/api/reservations/${id}/annuler`, {method:'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      await chargerReservations(currentFilter);
+      await chargerStats();
+    } else {
+      alert(d.error || 'Erreur');
+    }
+  } catch(e) { alert('Erreur réseau'); }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function showMsg(el, type, text) {
+  el.className = type === 'ok' ? 'msg-ok' : 'msg-err';
+  el.textContent = text;
+  setTimeout(() => el.textContent = '', 4000);
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function fmtDate(d) {
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+init();
+// Rafraîchissement automatique toutes les 30s
+setInterval(() => { chargerStats(); chargerReservations(currentFilter); }, 30000);
+</script>
+</body>
+</html>

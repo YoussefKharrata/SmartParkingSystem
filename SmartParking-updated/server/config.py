@@ -1,0 +1,6 @@
+NB_PLACES   = 6
+MQTT_BROKER = "localhost"
+MQTT_PORT   = 1883
+SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_BAUD = 9600
+SEUIL_CM    = 10

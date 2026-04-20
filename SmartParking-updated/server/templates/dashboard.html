@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parking Intelligent</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;500;700;800&display=swap');
+
+:root {
+  --bg:     #080c14;
+  --card:   #0d1520;
+  --border: #162236;
+  --green:  #00e676;
+  --red:    #ff1744;
+  --blue:   #00b0ff;
+  --gold:   #ffd740;
+  --purple: #e040fb;
+  --orange: #ff6d00;
+  --text:   #b0bec5;
+  --dim:    #37474f;
+  --mono:   'Share Tech Mono', monospace;
+  --body:   'Exo 2', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  padding: 18px;
+  min-height: 100vh;
+}
+
+body::after {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 3px,
+    rgba(0,176,255,.018) 3px, rgba(0,176,255,.018) 4px
+  );
+}
+
+header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 14px; margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo { font-family: var(--mono); font-size: 1.3rem; color: var(--blue); letter-spacing: 3px; text-shadow: 0 0 14px var(--blue); }
+.topbar { display: flex; gap: 20px; align-items: center; }
+.pill { display: flex; align-items: center; gap: 6px; font-size: .72rem; letter-spacing: 1.5px; color: var(--dim); text-transform: uppercase; }
+.dot { width: 7px; height: 7px; border-radius: 50%; }
+.dot.on  { background: var(--green); box-shadow: 0 0 6px var(--green); animation: blink 2s infinite; }
+.dot.off { background: var(--red); }
+@keyframes blink { 50% { opacity: .3; } }
+#clock { font-family: var(--mono); font-size: .85rem; color: var(--blue); }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+.tab { padding: 8px 20px; font-size: .82rem; letter-spacing: 2px; text-transform: uppercase; background: none; border: none; cursor: pointer; color: var(--dim); font-family: var(--body); border-bottom: 2px solid transparent; transition: all .2s; }
+.tab:hover  { color: var(--text); }
+.tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.span2 { grid-column: span 2; }
+.span3 { grid-column: span 3; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px; position: relative; overflow: hidden; }
+.card-accent { position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: var(--blue); }
+.card-accent.green  { background: var(--green); }
+.card-accent.red    { background: var(--red); }
+.card-accent.gold   { background: var(--gold); }
+.card-accent.purple { background: var(--purple); }
+.card-title { font-size: .67rem; letter-spacing: 3px; color: var(--dim); text-transform: uppercase; margin-bottom: 14px; }
+
+.mrow { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid rgba(22,34,54,.8); font-size: .84rem; }
+.mrow:last-child { border: none; }
+.mlabel { color: var(--dim); }
+.mval { font-family: var(--mono); color: var(--blue); }
+.mval.g { color: var(--green); }
+.mval.r { color: var(--red); }
+.mval.o { color: var(--gold); }
+
+.btn { width: 100%; padding: 10px; margin-top: 8px; border-radius: 5px; border: 1px solid; background: none; cursor: pointer; font-family: var(--body); font-weight: 700; font-size: .82rem; letter-spacing: 2px; transition: background .2s; }
+.btn-g { color: var(--green); border-color: var(--green); }
+.btn-g:hover { background: rgba(0,230,118,.08); }
+.btn-r { color: var(--red); border-color: var(--red); }
+.btn-r:hover { background: rgba(255,23,68,.08); }
+
+/* ── Compteur global ── */
+.global-counter {
+  display: flex; gap: 14px; align-items: stretch;
+  margin-bottom: 14px;
+}
+.counter-pill {
+  flex: 1; padding: 14px 18px; border-radius: 8px;
+  border: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.counter-pill.libres  { border-color: rgba(0,230,118,.3); background: rgba(0,230,118,.05); }
+.counter-pill.occupes { border-color: rgba(255,23,68,.3);  background: rgba(255,23,68,.05); }
+.counter-pill.total   { border-color: rgba(0,176,255,.3);  background: rgba(0,176,255,.05); }
+.counter-num { font-family: var(--mono); font-size: 2.2rem; font-weight: 800; line-height: 1; }
+.counter-num.g { color: var(--green); text-shadow: 0 0 12px var(--green); }
+.counter-num.r { color: var(--red);   text-shadow: 0 0 12px var(--red); }
+.counter-num.b { color: var(--blue); }
+.counter-lbl { font-size: .65rem; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); }
+
+/* ── Grille des places ── */
+.places-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.place-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 12px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .3s, box-shadow .3s;
+}
+.place-card.libre   { border-color: rgba(0,230,118,.4); box-shadow: 0 0 10px rgba(0,230,118,.08); }
+.place-card.occupe  { border-color: rgba(255,23,68,.4);  box-shadow: 0 0 10px rgba(255,23,68,.08); }
+.place-card.reservee{ border-color: rgba(255,171,0,.5);  box-shadow: 0 0 10px rgba(255,171,0,.12); }
+
+.place-card-accent {
+  position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+  transition: background .3s;
+}
+.place-card.libre  .place-card-accent { background: var(--green); }
+.place-card.occupe .place-card-accent { background: var(--red); }
+.place-card.reservee .place-card-accent { background: #ffab00; }
+
+.place-num {
+  font-family: var(--mono); font-size: .65rem; letter-spacing: 2px;
+  color: var(--dim); text-transform: uppercase; margin-bottom: 6px;
+}
+.place-status-icon { font-size: 1.6rem; display: block; text-align: center; margin: 4px 0; }
+.place-status-txt {
+  font-size: .75rem; font-weight: 800; letter-spacing: 3px;
+  text-transform: uppercase; text-align: center;
+  transition: color .3s;
+}
+.place-card.libre  .place-status-txt { color: var(--green); }
+.place-card.occupe .place-status-txt { color: var(--red); }
+.place-card.reservee .place-status-txt { color: #ffab00; }
+.place-dist {
+  font-family: var(--mono); font-size: .62rem;
+  color: var(--dim); text-align: center; margin-top: 4px;
+}
+
+/* ── Badge + alertes ── */
+.badge-alert { padding: 14px; border-radius: 6px; background: rgba(0,176,255,.06); border: 1px solid rgba(0,176,255,.25); }
+.badge-uid { font-family: var(--mono); font-size: 1.1rem; color: var(--blue); letter-spacing: 3px; word-break: break-all; }
+.label-pill { display: inline-block; padding: 2px 12px; border-radius: 20px; font-size: .72rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-top: 6px; }
+.label-regulier    { background: rgba(0,230,118,.18); color: var(--green); }
+.label-occasionnel { background: rgba(255,215,64,.18); color: var(--gold); }
+.label-nouveau     { background: rgba(0,176,255,.18);  color: var(--blue); }
+.label-inconnu     { background: rgba(55,71,79,.3);    color: var(--dim); }
+.alerte-item { padding: 9px 12px; margin-bottom: 7px; border-radius: 5px; font-size: .81rem; background: rgba(255,23,68,.07); border-left: 3px solid var(--red); display: flex; gap: 12px; }
+.alerte-ts { font-family: var(--mono); font-size: .7rem; color: var(--dim); white-space: nowrap; }
+
+/* ── Prédictions ── */
+.pred-wrap { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.pred-item { display: grid; grid-template-columns: 32px 1fr 38px; align-items: center; gap: 8px; }
+.pred-heure { font-family: var(--mono); font-size: .7rem; color: var(--dim); text-align: right; }
+.pred-track { height: 14px; background: rgba(22,34,54,.9); border-radius: 3px; overflow: hidden; }
+.pred-fill  { height: 100%; border-radius: 3px; transition: width .7s cubic-bezier(.4,0,.2,1); }
+.pred-fill.lo { background: linear-gradient(90deg, rgba(0,230,118,.5), var(--green)); box-shadow: 0 0 6px rgba(0,230,118,.3); }
+.pred-fill.md { background: linear-gradient(90deg, rgba(255,109,0,.5), var(--orange)); box-shadow: 0 0 6px rgba(255,109,0,.3); }
+.pred-fill.hi { background: linear-gradient(90deg, rgba(255,23,68,.5), var(--red)); box-shadow: 0 0 8px rgba(255,23,68,.4); }
+.pred-pct { font-family: var(--mono); font-size: .7rem; text-align: right; }
+.pred-pct.lo { color: var(--green); }
+.pred-pct.md { color: var(--orange); }
+.pred-pct.hi { color: var(--red); }
+
+/* ── Tables ── */
+.ptable { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.ptable th { text-align: left; padding: 8px 10px; color: var(--dim); font-size: .68rem; letter-spacing: 2px; border-bottom: 1px solid var(--border); font-weight: 400; }
+.ptable td { padding: 9px 10px; border-bottom: 1px solid rgba(22,34,54,.6); }
+.ptable tr:hover td { background: rgba(0,176,255,.04); cursor: pointer; }
+.ptable .uid-cell { font-family: var(--mono); font-size: .78rem; color: var(--blue); }
+.heatmap { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 10px; }
+.hm-cell { width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: .6rem; color: var(--dim); background: rgba(22,34,54,.8); transition: background .3s; }
+.chart-wrap { height: 180px; }
+
+/* ── Modal ── */
+.modal-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(8,12,20,.85); display: none; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--card); border: 1px solid var(--border); border-radius: 10px; width: 560px; max-width: 95vw; max-height: 80vh; overflow-y: auto; padding: 24px; }
+.modal-close { float: right; background: none; border: none; color: var(--dim); font-size: 1.2rem; cursor: pointer; }
+.histo-row { padding: 5px 0; font-size: .78rem; font-family: var(--mono); border-bottom: 1px solid rgba(22,34,54,.5); display: flex; gap: 16px; }
+
+@media (max-width: 900px) {
+  .grid3 { grid-template-columns: 1fr 1fr; }
+  .span3  { grid-column: span 2; }
+  .places-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .grid3, .grid2 { grid-template-columns: 1fr; }
+  .span2, .span3 { grid-column: span 1; }
+  .places-grid { grid-template-columns: repeat(2, 1fr); }
+  .global-counter { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⬡ SMART PARKING</div>
+  <div class="topbar">
+    <div class="pill"><span class="dot on" id="dot-mqtt"></span>MQTT</div>
+    <div class="pill"><span class="dot on" id="dot-arduino"></span>ARDUINO</div>
+    <div id="clock">--:--:--</div>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('vue')">Vue d'ensemble</button>
+  <button class="tab"        onclick="showTab('profils')">Profils RFID</button>
+  <button class="tab"        onclick="showTab('stats')">Statistiques</button>
+</div>
+
+<!-- ═══════════════ VUE D'ENSEMBLE ═══════════════ -->
+<div id="tab-vue" class="tab-content active">
+
+  <!-- Compteurs globaux -->
+  <div class="global-counter">
+    <div class="counter-pill libres">
+      <div class="counter-num g" id="cnt-libres">—</div>
+      <div class="counter-lbl">Places libres</div>
+    </div>
+    <div class="counter-pill occupes">
+      <div class="counter-num r" id="cnt-occupees">—</div>
+      <div class="counter-lbl">Places occupées</div>
+    </div>
+    <div class="counter-pill" style="border-color:rgba(255,171,0,.3);background:rgba(255,171,0,.05)">
+      <div class="counter-num" style="color:#ffab00" id="cnt-reservees">—</div>
+      <div class="counter-lbl">Réservées</div>
+    </div>
+    <div class="counter-pill total">
+      <div class="counter-num b" id="cnt-total">—</div>
+      <div class="counter-lbl">Total places</div>
+    </div>
+  </div>
+  <div style="text-align:right;margin-bottom:8px">
+    <a href="/admin/reservations" style="color:var(--blue);font-size:.82rem;text-decoration:none;border:1px solid rgba(0,176,255,.3);padding:4px 12px;border-radius:4px">
+      📋 Admin Réservations
+    </a>
+  </div>
+
+  <!-- Grille dynamique des places -->
+  <div class="places-grid" id="places-grid"></div>
+
+  <!-- Ligne inférieure -->
+  <div class="grid3">
+
+    <div class="card">
+      <div class="card-accent"></div>
+      <div class="card-title">Porte garage</div>
+      <div style="text-align:center;padding:10px 0">
+        <span style="font-size:2.5rem" id="porte-icon">🚪</span>
+        <div style="font-weight:800;letter-spacing:3px;margin-top:6px" id="porte-label">FERMÉE</div>
+      </div>
+      <button class="btn btn-g" onclick="cmd('OPEN')">▲ OUVRIR</button>
+      <button class="btn btn-r" onclick="cmd('CLOSE')">▼ FERMER</button>
+    </div>
+
+    <div class="card">
+      <div class="card-accent purple"></div>
+      <div class="card-title">Dernier badge scanné</div>
+      <div id="badge-panel">
+        <div style="color:var(--dim);font-size:.82rem;text-align:center;padding:20px 0">En attente d'un badge...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-accent red"></div>
+      <div class="card-title">⚠ Alertes récentes</div>
+      <div id="alerte-list" style="max-height:180px;overflow-y:auto">
+        <div style="color:var(--dim);font-size:.8rem">Aucune alerte</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Prédictions ML -->
+  <div class="card" style="margin-top:14px">
+    <div class="card-accent gold"></div>
+    <div class="card-title">Prédictions occupation — 12h</div>
+    <div id="pred-wrap" class="pred-wrap">
+      <div style="color:var(--dim);font-size:.78rem">En attente du module ML...</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════ PROFILS ═══════════════ -->
+<div id="tab-profils" class="tab-content">
+  <div class="grid3">
+    <div class="card">
+      <div class="card-accent green"></div>
+      <div class="card-title">Résumé profils</div>
+      <div class="mrow"><span class="mlabel">Total badges</span><span class="mval" id="p-total">—</span></div>
+      <div class="mrow"><span class="mlabel">Réguliers (≥10)</span><span class="mval g" id="p-reguliers">—</span></div>
+      <div class="mrow"><span class="mlabel">Occasionnels (3–9)</span><span class="mval o" id="p-occasionnels">—</span></div>
+      <div class="mrow"><span class="mlabel">Nouveaux (1–2)</span><span class="mval" id="p-nouveaux">—</span></div>
+      <div class="mrow"><span class="mlabel">Total passages</span><span class="mval" id="p-passages">—</span></div>
+    </div>
+    <div class="card span2">
+      <div class="card-accent"></div>
+      <div class="card-title">Heures de passage (tous badges)</div>
+      <div class="heatmap" id="heatmap-heures"></div>
+    </div>
+    <div class="card span3">
+      <div class="card-accent purple"></div>
+      <div class="card-title">Tous les badges — cliquer pour le détail</div>
+      <div style="overflow-x:auto">
+        <table class="ptable">
+          <thead><tr>
+            <th>UID</th><th>Type carte</th><th>Label</th><th>Visites</th>
+            <th>1ère visite</th><th>Dernière visite</th><th>Heure fréquente</th><th>Jour fréquent</th>
+          </tr></thead>
+          <tbody id="profils-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card span3">
+      <div class="card-accent"></div>
+      <div class="card-title">Historique des passages</div>
+      <div style="overflow-x:auto">
+        <table class="ptable">
+          <thead><tr>
+            <th>Horodatage</th><th>UID</th><th>Type</th><th>Heure</th><th>Jour</th><th>Label</th><th>Visites</th>
+          </tr></thead>
+          <tbody id="rfid-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ STATISTIQUES ═══════════════ -->
+<div id="tab-stats" class="tab-content">
+  <div class="grid2">
+    <div class="card">
+      <div class="card-accent gold"></div>
+      <div class="card-title">Vue globale</div>
+      <div class="mrow"><span class="mlabel">Total mesures</span><span class="mval" id="s-mesures">—</span></div>
+      <div class="mrow"><span class="mlabel">Taux occupation moyen</span><span class="mval" id="s-taux">—%</span></div>
+      <div class="mrow"><span class="mlabel">Badges enregistrés</span><span class="mval" id="s-badges">—</span></div>
+      <div class="mrow"><span class="mlabel">Total passages</span><span class="mval" id="s-passages">—</span></div>
+    </div>
+    <div class="card">
+      <div class="card-accent green"></div>
+      <div class="card-title">Passages par heure</div>
+      <div class="chart-wrap"><canvas id="chart-passages"></canvas></div>
+    </div>
+    <div class="card span2">
+      <div class="card-accent"></div>
+      <div class="card-title">Taux d'occupation par heure (%)</div>
+      <div class="chart-wrap"><canvas id="chart-occ"></canvas></div>
+    </div>
+    <div class="card span2">
+      <div class="card-accent purple"></div>
+      <div class="card-title">Taux d'occupation par place (%)</div>
+      <div class="chart-wrap"><canvas id="chart-occ-place"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ MODAL ═══════════════ -->
+<div class="modal-overlay" id="modal-overlay" onclick="fermerModal(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="fermerModal()">✕</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+let chartOcc = null, chartPass = null, chartOccPlace = null;
+let NB_PLACES = 6;
+const JOURS = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('fr-FR');
+}, 1000);
+
+async function init() {
+  const r = await fetch('/api/config');
+  const c = await r.json();
+  NB_PLACES = c.nb_places;
+  document.getElementById('cnt-total').textContent = NB_PLACES;
+  buildPlacesGrid();
+  const etatR = await fetch('/api/etat');
+  const etat  = await etatR.json();
+  document.getElementById('cnt-libres').textContent   = etat.nb_libres   ?? NB_PLACES;
+  document.getElementById('cnt-occupees').textContent = etat.nb_occupees ?? 0;
+  document.getElementById('cnt-reservees').textContent = etat.nb_reservees ?? 0;
+  for (let i = 1; i <= NB_PLACES; i++) {
+    const p = etat.places?.[String(i)];
+    if (p) updatePlaceCard(i, p.occupe, p.distance, p.reservee);
+  }
+  chargerStats();
+  chargerPredictionsInitiales();
+}
+
+function buildPlacesGrid() {
+  const grid = document.getElementById('places-grid');
+  grid.innerHTML = '';
+  for (let i = 1; i <= NB_PLACES; i++) {
+    grid.innerHTML += `
+      <div class="place-card libre" id="place-card-${i}">
+        <div class="place-card-accent"></div>
+        <div class="place-num">Place ${i}</div>
+        <span class="place-status-icon" id="place-icon-${i}">🟢</span>
+        <div class="place-status-txt" id="place-txt-${i}">LIBRE</div>
+        <div class="place-dist" id="place-dist-${i}">— cm</div>
+      </div>`;
+  }
+}
+
+function updatePlaceCard(pid, occupe, distance) {
+  const card = document.getElementById(`place-card-${pid}`);
+  const icon = document.getElementById(`place-icon-${pid}`);
+  const txt  = document.getElementById(`place-txt-${pid}`);
+  const dist = document.getElementById(`place-dist-${pid}`);
+  if (!card) return;
+  let cls = 'place-card ';
+  let ico = '🟢', label = 'LIBRE';
+  if (occupe) {
+    cls += 'occupe'; ico = '🔴'; label = 'OCCUPÉE';
+  } else if (reservee) {
+    cls += 'reservee'; ico = '🟡'; label = 'RÉSERVÉE';
+  } else {
+    cls += 'libre';
+  }
+  card.className = cls;
+  icon.textContent = ico;
+  txt.textContent  = label;
+  dist.textContent = distance != null ? distance + ' cm' : '— cm';
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'profils') { chargerProfils(); chargerRFID(); }
+  if (name === 'stats')   { chargerStats(); }
+}
+
+socket.on('sensor_update', d => {
+  updatePlaceCard(d.place_id, d.occupe, d.distance, d.reservee);
+  document.getElementById('cnt-libres').textContent    = d.nb_libres   ?? '—';
+  document.getElementById('cnt-occupees').textContent  = d.nb_occupees ?? '—';
+  document.getElementById('cnt-reservees').textContent = d.nb_reservees ?? '—';
+  if (d.derniere_maj) {
+    document.getElementById('dot-arduino').className = 'dot on';
+  }
+});
+
+
+socket.on('porte_update', d => {
+  const o = d.porte_ouverte;
+  document.getElementById('porte-icon').textContent  = o ? '🔓' : '🚪';
+  document.getElementById('porte-label').textContent = o ? 'OUVERTE' : 'FERMÉE';
+  document.getElementById('porte-label').style.color = o ? 'var(--green)' : 'var(--text)';
+});
+
+socket.on('nouveau_badge', d => {
+  afficherDernierBadge(d.uid, d.profil || {});
+  if (document.getElementById('tab-profils').classList.contains('active')) {
+    chargerProfils(); chargerRFID();
+  }
+});
+
+socket.on('profils_update', profils => {
+  if (document.getElementById('tab-profils').classList.contains('active')) {
+    rendreTableauProfils(profils);
+  }
+});
+
+socket.on('ml_update', d => { rendrePredictions(d.predictions || []); });
+
+socket.on('nouvelle_alerte', a => {
+  const list = document.getElementById('alerte-list');
+  if (list.querySelector('[style*="color:var(--dim)"]')) list.innerHTML = '';
+  const ts = new Date(a.timestamp).toLocaleTimeString('fr-FR');
+  list.insertAdjacentHTML('afterbegin', `
+    <div class="alerte-item">
+      <span class="alerte-ts">${ts}</span>
+      <span>${a.message || a.description || ''}</span>
+    </div>`);
+});
+
+function rendrePredictions(preds) {
+  if (!preds.length) return;
+  const wrap = document.getElementById('pred-wrap');
+  const now  = new Date().getHours();
+  wrap.innerHTML = preds.map(p => {
+    const pct = Math.round(p.prob_occupe * 100);
+    const cls = pct > 70 ? 'hi' : pct > 40 ? 'md' : 'lo';
+    const cur = p.heure === now;
+    return `<div class="pred-item" style="${cur ? '' : 'opacity:.75'}">
+      <div class="pred-heure" style="${cur ? 'color:var(--blue)' : ''}">${p.heure}h</div>
+      <div class="pred-track"><div class="pred-fill ${cls}" style="width:${pct}%"></div></div>
+      <div class="pred-pct ${cls}">${pct}%</div>
+    </div>`;
+  }).join('');
+}
+
+function afficherDernierBadge(uid, profil) {
+  const label = profil.label || 'inconnu';
+  document.getElementById('badge-panel').innerHTML = `
+    <div class="badge-alert">
+      <div class="badge-uid">${uid}</div>
+      <div style="font-size:.75rem;color:var(--dim);margin-top:4px">${profil.card_type || ''}</div>
+      <span class="label-pill label-${label}">${label.toUpperCase()}</span>
+      <div style="margin-top:10px">
+        <div class="mrow" style="padding:4px 0">
+          <span class="mlabel" style="font-size:.78rem">Visites</span>
+          <span class="mval">${profil.nb_visites || 1}</span>
+        </div>
+        <div class="mrow" style="padding:4px 0">
+          <span class="mlabel" style="font-size:.78rem">1ère visite</span>
+          <span class="mval" style="font-size:.72rem">${profil.premiere_visite ? new Date(profil.premiere_visite).toLocaleDateString('fr-FR') : '—'}</span>
+        </div>
+        <div class="mrow" style="padding:4px 0;border:none">
+          <span class="mlabel" style="font-size:.78rem">Heure habituelle</span>
+          <span class="mval">${heureFrequente(profil.heures_frequentes)}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function heureFrequente(raw) {
+  try {
+    const h = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!h) return '—';
+    const best = Object.entries(h).sort((a,b) => b[1]-a[1])[0];
+    return best ? best[0] + 'h' : '—';
+  } catch { return '—'; }
+}
+
+function jourFrequent(raw) {
+  try {
+    const j = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!j) return '—';
+    const best = Object.entries(j).sort((a,b) => b[1]-a[1])[0];
+    return best ? JOURS[parseInt(best[0])] : '—';
+  } catch { return '—'; }
+}
+
+function labelClass(label) { return 'label-' + (label || 'inconnu'); }
+
+async function chargerProfils() {
+  const r      = await fetch('/api/profils');
+  const profils = await r.json();
+  rendreTableauProfils(profils);
+  document.getElementById('p-total').textContent        = profils.length;
+  document.getElementById('p-reguliers').textContent    = profils.filter(p => p.label === 'regulier').length;
+  document.getElementById('p-occasionnels').textContent = profils.filter(p => p.label === 'occasionnel').length;
+  document.getElementById('p-nouveaux').textContent     = profils.filter(p => p.label === 'nouveau').length;
+  document.getElementById('p-passages').textContent     = profils.reduce((s, p) => s + (p.nb_visites||0), 0);
+  const stats = await (await fetch('/api/stats')).json();
+  rendreHeatmap(stats.passages_par_heure || []);
+}
+
+function rendreTableauProfils(profils) {
+  document.getElementById('profils-tbody').innerHTML = profils.map(p => `
+    <tr onclick="ouvrirModal('${p.uid}')">
+      <td class="uid-cell">${p.uid}</td>
+      <td>${p.card_type || '—'}</td>
+      <td><span class="label-pill ${labelClass(p.label)}">${(p.label||'inconnu').toUpperCase()}</span></td>
+      <td style="font-family:var(--mono)">${p.nb_visites}</td>
+      <td>${p.premiere_visite ? new Date(p.premiere_visite).toLocaleDateString('fr-FR') : '—'}</td>
+      <td>${p.derniere_visite ? new Date(p.derniere_visite).toLocaleString('fr-FR') : '—'}</td>
+      <td style="font-family:var(--mono)">${heureFrequente(p.heures_frequentes)}</td>
+      <td>${jourFrequent(p.jours_frequents)}</td>
+    </tr>`).join('');
+}
+
+async function chargerRFID() {
+  const r    = await fetch('/api/rfid');
+  const rows = await r.json();
+  document.getElementById('rfid-tbody').innerHTML = rows.map(e => `
+    <tr>
+      <td style="font-size:.75rem">${new Date(e.timestamp).toLocaleString('fr-FR')}</td>
+      <td class="uid-cell">${e.uid}</td>
+      <td>${e.card_type || '—'}</td>
+      <td style="font-family:var(--mono)">${e.heure}h</td>
+      <td>${JOURS[e.jour_semaine] || e.jour_semaine}</td>
+      <td><span class="label-pill ${labelClass(e.label)}">${(e.label||'—').toUpperCase()}</span></td>
+      <td style="font-family:var(--mono)">${e.nb_visites || '—'}</td>
+    </tr>`).join('');
+}
+
+function rendreHeatmap(data) {
+  const maxNb = Math.max(...data.map(d => d.nb), 1);
+  const map   = {};
+  data.forEach(d => { map[d.heure] = d.nb; });
+  let html = '';
+  for (let h = 0; h < 24; h++) {
+    const nb    = map[h] || 0;
+    const alpha = nb / maxNb;
+    const bg    = `rgba(0,176,255,${0.08 + alpha * 0.75})`;
+    html += `<div class="hm-cell" style="background:${bg}" title="${h}h: ${nb} passages">${h}h</div>`;
+  }
+  document.getElementById('heatmap-heures').innerHTML = html;
+}
+
+async function ouvrirModal(uid) {
+  const r = await fetch('/api/profil/' + uid);
+  const d = await r.json();
+  const p = d.profil;
+  document.getElementById('modal-content').innerHTML = `
+    <h3 style="font-family:var(--mono);color:var(--blue);margin-bottom:16px">${uid}</h3>
+    <span class="label-pill ${labelClass(p.label)}">${(p.label||'inconnu').toUpperCase()}</span>
+    <div style="margin-top:16px">
+      <div class="mrow"><span class="mlabel">Type carte</span><span class="mval">${p.card_type||'—'}</span></div>
+      <div class="mrow"><span class="mlabel">Nombre de visites</span><span class="mval">${p.nb_visites}</span></div>
+      <div class="mrow"><span class="mlabel">Première visite</span><span class="mval">${new Date(p.premiere_visite).toLocaleString('fr-FR')}</span></div>
+      <div class="mrow"><span class="mlabel">Dernière visite</span><span class="mval">${new Date(p.derniere_visite).toLocaleString('fr-FR')}</span></div>
+      <div class="mrow"><span class="mlabel">Heure habituelle</span><span class="mval">${heureFrequente(p.heures_frequentes)}</span></div>
+      <div class="mrow"><span class="mlabel">Jour habituel</span><span class="mval">${jourFrequent(p.jours_frequents)}</span></div>
+    </div>
+    <div style="margin-top:16px;font-size:.68rem;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin-bottom:8px">50 derniers passages</div>
+    <div style="max-height:220px;overflow-y:auto">
+      ${(d.historique||[]).map(h => `
+        <div class="histo-row">
+          <span style="color:var(--dim)">${new Date(h.timestamp).toLocaleString('fr-FR')}</span>
+          <span>${h.heure}h</span>
+          <span style="color:var(--dim)">${JOURS[h.jour_semaine]||''}</span>
+        </div>`).join('')}
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function fermerModal(e) {
+  if (!e || e.target === document.getElementById('modal-overlay') || !e.target) {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+}
+
+async function chargerStats() {
+  const r = await fetch('/api/stats');
+  const s = await r.json();
+  document.getElementById('s-mesures').textContent  = s.total_mesures || 0;
+  document.getElementById('s-taux').textContent     = (s.taux_occupation || 0) + '%';
+  document.getElementById('s-badges').textContent   = s.total_badges || 0;
+  document.getElementById('s-passages').textContent = s.total_passages || 0;
+
+  const labels = Array.from({length:24}, (_, i) => i + 'h');
+  const occData = new Array(24).fill(0);
+  (s.occupation_par_heure || []).forEach(d => { occData[d.heure] = d.taux; });
+  if (chartOcc) chartOcc.destroy();
+  chartOcc = new Chart(document.getElementById('chart-occ').getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data: occData, backgroundColor: occData.map(v => v > 70 ? 'rgba(255,23,68,.65)' : v > 40 ? 'rgba(255,109,0,.65)' : 'rgba(0,230,118,.45)'), borderRadius: 4 }] },
+    options: chartOptions(100)
+  });
+
+  const passData = new Array(24).fill(0);
+  (s.passages_par_heure || []).forEach(d => { passData[d.heure] = d.nb; });
+  if (chartPass) chartPass.destroy();
+  chartPass = new Chart(document.getElementById('chart-passages').getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data: passData, backgroundColor: 'rgba(0,176,255,.55)', borderRadius: 4 }] },
+    options: chartOptions()
+  });
+
+  const placeLabels = Array.from({length: NB_PLACES}, (_, i) => `P${i+1}`);
+  const placeData   = new Array(NB_PLACES).fill(0);
+  (s.occupation_par_place || []).forEach(d => {
+    if (d.place_id >= 1 && d.place_id <= NB_PLACES) placeData[d.place_id - 1] = d.taux;
+  });
+  if (chartOccPlace) chartOccPlace.destroy();
+  chartOccPlace = new Chart(document.getElementById('chart-occ-place').getContext('2d'), {
+    type: 'bar',
+    data: { labels: placeLabels, datasets: [{ data: placeData, backgroundColor: placeData.map(v => v > 70 ? 'rgba(255,23,68,.65)' : v > 40 ? 'rgba(255,109,0,.65)' : 'rgba(0,230,118,.45)'), borderRadius: 4 }] },
+    options: chartOptions(100)
+  });
+}
+
+function chartOptions(max) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#37474f', font: { size: 10 } }, grid: { color: 'rgba(22,34,54,.5)' } },
+      y: { ticks: { color: '#37474f' }, grid: { color: 'rgba(22,34,54,.5)' }, ...(max ? { max } : {}) }
+    }
+  };
+}
+
+async function chargerPredictionsInitiales() {
+  const r = await fetch('/api/predictions');
+  const d = await r.json();
+  rendrePredictions(d.predictions || []);
+}
+
+function cmd(c) {
+  fetch('/api/commande', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({commande: c}) });
+}
+
+init();
+</script>
+</body>
+</html>

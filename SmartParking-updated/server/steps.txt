@@ -1,0 +1,19 @@
+#Terminal 1 (admin)
+"C:\Program Files\mosquitto\mosquitto.exe" -v
+
+# Terminal 2
+python3 ml_module.py --train-only   # entraîner d'abord une fois
+python3 ml_module.py                # puis lancer le serveur
+
+# Terminal 3
+python3 dashboard.py
+
+# Terminal 4
+python3 simulate_arduino.py --auto
+
+ou manuel sans --auto:
+s1
+r
+s0
+r
+r DE:AD:BE:EF
