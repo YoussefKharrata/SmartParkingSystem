@@ -13,7 +13,7 @@ from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO
 import paho.mqtt.client as mqtt
-from config import NB_PLACES, MQTT_BROKER, MQTT_PORT
+from config import NB_PLACES, MQTT_BROKER, MQTT_PORT, MQTT_USER, MQTT_PASS, SECRET_KEY
 from reservations import (
     init_reservation_tables,
     get_places_reservees_maintenant,
@@ -24,8 +24,12 @@ BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 DB_PATH   = os.path.join(BASE_DIR, "data", "parking.db")
 MODEL_DIR = os.path.join(BASE_DIR, "models")
 
+# Créer les dossiers nécessaires au démarrage
+os.makedirs(os.path.join(BASE_DIR, "data"), exist_ok=True)
+os.makedirs(MODEL_DIR, exist_ok=True)
+
 app      = Flask(__name__, template_folder="templates")
-app.config["SECRET_KEY"] = "parking-iot-2025"
+app.config["SECRET_KEY"] = SECRET_KEY
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 app.register_blueprint(reservations_bp)
@@ -50,7 +54,6 @@ etat = {
 
 
 def recalc_globaux():
-    # Mettre à jour les places réservées depuis la DB
     places_reservees = get_places_reservees_maintenant()
     for pid_str, place in etat["places"].items():
         place["reservee"] = int(pid_str) in places_reservees
@@ -132,14 +135,21 @@ def on_mqtt_message(client, userdata, msg):
         log.error("MQTT message error: %s", e)
 
 
+# Connexion MQTT avec support authentification (HiveMQ Cloud, EMQX, etc.)
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 mqtt_client.on_connect = on_mqtt_connect
 mqtt_client.on_message = on_mqtt_message
+if MQTT_USER:
+    mqtt_client.username_pw_set(MQTT_USER, MQTT_PASS)
+# TLS automatique si port 8883
+if MQTT_PORT == 8883:
+    mqtt_client.tls_set()
 try:
     mqtt_client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
     threading.Thread(target=mqtt_client.loop_forever, daemon=True).start()
+    log.info("MQTT connecté à %s:%d", MQTT_BROKER, MQTT_PORT)
 except Exception as e:
-    log.error("MQTT non disponible : %s", e)
+    log.warning("MQTT non disponible au démarrage : %s — dashboard fonctionne quand même", e)
 
 
 @app.route("/")
@@ -150,11 +160,6 @@ def index():
 @app.route("/admin/reservations")
 def admin_reservations():
     return render_template("admin_reservations.html")
-
-
-@app.route("/admin/passages")
-def admin_passages():
-    return render_template("admin_passages.html")
 
 
 @app.route("/api/etat")
@@ -285,11 +290,15 @@ def api_commande():
     data = request.get_json()
     cmd  = data.get("commande", "")
     if cmd in ["OPEN", "CLOSE"]:
-        mqtt_client.publish("parking/commande", json.dumps({"commande": cmd}))
+        try:
+            mqtt_client.publish("parking/commande", json.dumps({"commande": cmd}))
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 400
 
 
 if __name__ == "__main__":
-    log.info("Dashboard sur http://0.0.0.0:5000 — %d places", NB_PLACES)
-    socketio.run(app, host="0.0.0.0", port=5000, debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    log.info("Dashboard sur http://0.0.0.0:%d — %d places", port, NB_PLACES)
+    socketio.run(app, host="0.0.0.0", port=port, debug=False)

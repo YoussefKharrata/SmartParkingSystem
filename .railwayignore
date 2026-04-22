@@ -1,0 +1,7 @@
+dataset.csv
+simulate_arduino.py
+mqtt_bridge.py
+steps.txt
+logs/
+__pycache__/
+*.pyc
